@@ -701,6 +701,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     onSaveGameState(null);
   };
 
+  // Fast, accessible controls that work without any external dependency.
+  useEffect(() => {
+    const handleKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedSquare(null);
+        setLegalTargetSquares([]);
+        setHint(null);
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (canUndo) handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyboard);
+    return () => window.removeEventListener('keydown', handleKeyboard);
+  }, [canUndo, handleUndo]);
+
   // Top player / Bottom player mapping based on board orientation
   const topSide: Side = boardFlipped ? 'white' : 'black';
   const bottomSide: Side = boardFlipped ? 'black' : 'white';
