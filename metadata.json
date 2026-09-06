@@ -1,0 +1,6 @@
+{
+  "name": "مجلس الشطرنج",
+  "description": "تطبيق شطرنج متطور يدعم اللعب المحلي واللعب ضد الذكاء الاصطناعي مع تحسينات الأداء وتجربة المستخدم",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
