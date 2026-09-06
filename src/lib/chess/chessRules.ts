@@ -527,11 +527,6 @@ export function isInsufficientMaterial(board: Board): boolean {
     return bishopColors.length === 2 && bishopColors[0] === bishopColors[1];
   }
 
-  // King + Knight vs King + Knight or King + Bishop vs King + Knight
-  if (pieces.length === 2 && pieces[0].side !== pieces[1].side) {
-    return true;
-  }
-
   // King + 2 Knights vs bare King cannot force mate
   if (
     pieces.length === 2 &&
@@ -560,7 +555,26 @@ export function positionKey(
       castlingRights.blackKingSide ? 'k' : '',
       castlingRights.blackQueenSide ? 'q' : '',
     ].join('') || '-';
-  return `${boardKey} ${turn[0]} ${rightsKey} ${enPassantTarget ? squareToUci(enPassantTarget) : '-'}`;
+  // FEN/repetition rules include the en-passant square only when a capture
+  // is actually available to the side to move.
+  let repetitionEnPassant: Position | null = null;
+  if (enPassantTarget) {
+    const direction = turn === 'white' ? -1 : 1;
+    const pawnRow = enPassantTarget.row - direction;
+    if (isInside(pawnRow, enPassantTarget.col)) {
+      for (const pawnCol of [enPassantTarget.col - 1, enPassantTarget.col + 1]) {
+        if (
+          isInside(pawnRow, pawnCol) &&
+          board[pawnRow][pawnCol]?.side === turn &&
+          board[pawnRow][pawnCol]?.kind === 'pawn'
+        ) {
+          repetitionEnPassant = enPassantTarget;
+          break;
+        }
+      }
+    }
+  }
+  return `${boardKey} ${turn[0]} ${rightsKey} ${repetitionEnPassant ? squareToUci(repetitionEnPassant) : '-'}`;
 }
 
 export function pieceSanLetter(kind: PieceKind): string {
@@ -586,7 +600,12 @@ export function formatSan(
   nextTurn: Side,
   nextMoves: { from: Position; to: Position }[],
 ): string {
-  if (move.special === 'castle') return move.to.col > move.from.col ? 'O-O' : 'O-O-O';
+  if (move.special === 'castle') {
+    const notation = move.to.col > move.from.col ? 'O-O' : 'O-O-O';
+    if (nextMoves.length === 0 && isInCheck(nextBoard, nextTurn)) return `${notation}#`;
+    if (isInCheck(nextBoard, nextTurn)) return `${notation}+`;
+    return notation;
+  }
   const capture = Boolean(move.captured) || move.special === 'enPassant';
   let notation = pieceSanLetter(move.piece.kind);
 
