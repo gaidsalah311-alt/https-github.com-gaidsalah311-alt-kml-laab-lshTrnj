@@ -187,6 +187,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   historyRef.current = history;
   const clocksRef = useRef({ white: whiteClock, black: blackClock });
   clocksRef.current = { white: whiteClock, black: blackClock };
+  const lastTimerTickRef = useRef(Date.now());
 
   // Sound toggle override for this match
   const [soundOn, setSoundOn] = useState(settings.soundEnabled);
@@ -224,38 +225,45 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     };
   }, [board]);
 
-  // High performance Timer loop: Updates clocks without triggering AsyncStorage spam
+  // Use elapsed wall-clock time so Android backgrounding does not pause the clock.
   useEffect(() => {
     if (!settings.timerEnabled || status !== 'playing') return;
-
+    lastTimerTickRef.current = Date.now();
     const interval = setInterval(() => {
-      if (turn === 'white') {
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - lastTimerTickRef.current) / 1000);
+      if (elapsedSeconds < 1) return;
+      lastTimerTickRef.current += elapsedSeconds * 1000;
+      const activeTurn = turnRef.current;
+      if (activeTurn === 'white') {
         setWhiteClock((prev) => {
-          if (prev <= 1) {
+          if (prev <= elapsedSeconds) {
             clearInterval(interval);
+            statusRef.current = 'timeout';
             setStatus('timeout');
             soundManager.play('gameOver', soundOn);
             onRecordResult(gameMode === 'computer' && playerSide === 'white' ? 'loss' : 'win');
             return 0;
           }
-          return prev - 1;
+          return prev - elapsedSeconds;
         });
       } else {
         setBlackClock((prev) => {
-          if (prev <= 1) {
+          if (prev <= elapsedSeconds) {
             clearInterval(interval);
+            statusRef.current = 'timeout';
             setStatus('timeout');
             soundManager.play('gameOver', soundOn);
             onRecordResult(gameMode === 'computer' && playerSide === 'black' ? 'loss' : 'win');
             return 0;
           }
-          return prev - 1;
+          return prev - elapsedSeconds;
         });
       }
-    }, 1000);
+    }, 250);
 
     return () => clearInterval(interval);
-  }, [settings.timerEnabled, status, turn, gameMode, playerSide, soundOn, onRecordResult]);
+  }, [settings.timerEnabled, status, gameMode, playerSide, soundOn, onRecordResult]);
 
   // Save game state ONLY on game changes (not on every clock tick!)
   useEffect(() => {
@@ -299,6 +307,30 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     initialSnapshot,
     onSaveGameState,
   ]);
+
+  useEffect(() => {
+    const persistWhenHidden = () => {
+      if (document.visibilityState !== 'hidden' || statusRef.current !== 'playing' || historyRef.current.length === 0) return;
+      onSaveGameState({
+        board: boardRef.current,
+        turn: turnRef.current,
+        history: historyRef.current,
+        castlingRights: castlingRightsRef.current,
+        enPassantTarget: enPassantRef.current,
+        halfmoveClock,
+        positionKeys,
+        status: statusRef.current,
+        whiteClock: clocksRef.current.white,
+        blackClock: clocksRef.current.black,
+        gameMode,
+        playerSide,
+        hintsRemaining,
+        undosRemaining,
+      });
+    };
+    document.addEventListener('visibilitychange', persistWhenHidden);
+    return () => document.removeEventListener('visibilitychange', persistWhenHidden);
+  }, [gameMode, halfmoveClock, hintsRemaining, onSaveGameState, playerSide, positionKeys, undosRemaining]);
 
   // Central Move Execution Function
   const executeMove = useCallback(

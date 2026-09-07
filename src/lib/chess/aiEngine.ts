@@ -198,13 +198,18 @@ const OPENING_BOOK: Record<string, string[]> = {
 };
 
 // Fast board hash for transposition cache
-function boardFastKey(board: Board, turn: Side, rights: CastlingRights): string {
+function boardFastKey(
+  board: Board,
+  turn: Side,
+  rights: CastlingRights,
+  enPassantTarget: Position | null,
+): string {
   let key = turn === 'white' ? 'w' : 'b';
   if (rights.whiteKingSide) key += 'K';
   if (rights.whiteQueenSide) key += 'Q';
   if (rights.blackKingSide) key += 'k';
   if (rights.blackQueenSide) key += 'q';
-  key += '|';
+  key += `|${enPassantTarget ? `${enPassantTarget.row}${enPassantTarget.col}` : '-'}`;
 
   for (let r = 0; r < 8; r += 1) {
     const row = board[r];
@@ -281,7 +286,7 @@ function minimax(
   }
 
   // Transposition table lookup
-  const key = boardFastKey(board, turn, castlingRights);
+  const key = boardFastKey(board, turn, castlingRights, enPassantTarget);
   const cached = tt.get(key);
   if (cached && cached.depth >= depth) {
     if (cached.flag === 'exact') return cached.score;
